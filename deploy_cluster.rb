@@ -11,7 +11,23 @@ require 'droplet_kit'
 require 'socket'
 require 'timeout'
 
+# method to check if a given port is open on a host.  used to check that cassandra has started on a remote host
+def isopen(ip, port)
+  begin
+    Timeout::timeout(1) do
+      begin
+        s = TCPSocket.new(ip, port)
+        s.close
+        return true
+      rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH
+        return false
+      end
+    end
+  rescue Timeout::Error
+  end
 
+  return false
+end
 
 client = DropletKit::Client.new(access_token: token)
 region = ''
@@ -196,7 +212,7 @@ while droplets_created < node_count.to_i do
   puts "Deploying Node "+droplets_created.to_s
   sitename = cluster_name+droplets_created.to_s
   sitename.gsub!(/\s/,'-')
-  
+
 userdata = <<-EOM
 #!/bin/bash
 export SEED_ADDRESS='#{seed_address}';
@@ -218,20 +234,3 @@ EOM
 end
 
 
-# method to check if a given port is open on a host.  used to check that cassandra has started on a remote host
-def isopen(ip, port)
-  begin
-    Timeout::timeout(1) do
-      begin
-        s = TCPSocket.new(ip, port)
-        s.close
-        return true
-      rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH
-        return false
-      end
-    end
-  rescue Timeout::Error
-  end
-
-  return false
-end
