@@ -198,7 +198,7 @@ puts "Waiting for Cassandra service to start on seed node..."
 c_up = 0
 while c_up != 1 do
   print "."
-  if isopen(seed_address,9160)
+  if isopen(seed_address,7199)
     c_up = 1
   else
     c_up = 0
