@@ -1,15 +1,26 @@
 # cassandra cluster deployment
+
+# Settings ###############
+image_id = '10863222' # Will be replaced with the cassandra slug once the image is live
+ssh_keys=[''] # ID of the ssh key to use.  To launch with passwords the two droplet create calls must be adjusted
+token='' # Token Here
+##########################
+
+
 require 'droplet_kit'
-token='[ADD TOKEN HERE]'
+require 'socket'
+require 'timeout'
+
+
+
 client = DropletKit::Client.new(access_token: token)
 region = ''
-image_id = '10863222'
 droplet_size = ''
 node_count = 0
 cluster_name = ''
 admin_user = ''
 admin_pass = ''
-ssh_keys=['ADD SSH KEY ID HERE']
+
 
 puts "This script will create a Cassandra DB Cluster on DigitalOcean.  To begin we need to gather some details."
 
@@ -121,25 +132,24 @@ cqlsh -u ${admin_user} -p ${admin_password} -e "ALTER USER cassandra WITH PASSWO
 
 EOM
 
-puts "userdata:"+userdata+":end"
-
 droplet = DropletKit::Droplet.new(name: sitename, region: region, size: droplet_size, image: image_id, user_data: userdata, ssh_keys: ssh_keys)
 create = client.droplets.create(droplet)
 
 droplets_created = 1;
-#p create;
-createid = create.id.to_s
-puts 'seed create event: '+createid
 
-print "\nDeploying Node 0.  Waiting for Cassandra service to be live to deploy additional nodes..."
+createid = create.id.to_s
+
+puts " "
+print "Creating Seed Node..."
 create_complete = 0
 
 
 while create_complete != 1 do
+  print "."
 dobj = client.droplets.find(id: createid)
 
   if dobj.status == 'active'
-    #puts 'status: '+dobj.status
+
     create_complete = 1
   else
     print "."
@@ -167,7 +177,19 @@ seed_address = seed_drop.networks.v4[0].ip_address
 puts "SEED IP: "+seed_address
 # Create additional nodes
 
-
+# Now we will wait until the Cassandra service on our seed node is active and responding to requests.
+puts "Waiting for Cassandra service to start on seed node..."
+c_up = 0
+while c_up != 1 do
+  print "."
+  if isopen(seed_address,9160)
+    c_up = 1
+  else
+    c_up = 0
+  end
+  print "."
+  sleep(5)
+end
 
 
 while droplets_created < node_count.to_i do
@@ -185,7 +207,7 @@ sed -i.bak "s/cluster\\_name\\:\\ 'Test Cluster'/cluster\\_name\\:\\ '#{cluster_
 sed -i.bak s/authenticator\\:\\ AllowAllAuthenticator/authenticator\\:\\ PasswordAuthenticator/g /etc/cassandra/cassandra.yaml;
 sed -i.bak s/listen\\_address\\:\\ localhost/listen_address\\:\\ ${IP_ADDRESS}/g /etc/cassandra/cassandra.yaml;
 sed -i.bak s/\\-\\ seeds\\:\\ \\"127.0.0.1\\"/\\-\\ seeds\\:\\ \\"${SEED_ADDRESS}\\"/g /etc/cassandra/cassandra.yaml;
-sleep 60;
+#sleep 240;
 service cassandra start;
 
 EOM
@@ -193,4 +215,23 @@ EOM
   droplet = DropletKit::Droplet.new(name: sitename, region: region, size: droplet_size, image: image_id, user_data: userdata, ssh_keys: ssh_keys)
   client.droplets.create(droplet)
   droplets_created += 1
+end
+
+
+# method to check if a given port is open on a host.  used to check that cassandra has started on a remote host
+def isopen(ip, port)
+  begin
+    Timeout::timeout(1) do
+      begin
+        s = TCPSocket.new(ip, port)
+        s.close
+        return true
+      rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH
+        return false
+      end
+    end
+  rescue Timeout::Error
+  end
+
+  return false
 end
