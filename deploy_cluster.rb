@@ -1,7 +1,7 @@
 # cassandra cluster deployment
 
 # Settings ###############
-image_id = '10863222' # Will be replaced with the cassandra slug once the image is live
+image_id = 'cassandra' # Image slug for the cassandra one-click image
 ssh_keys=[''] # ID of the ssh key to use.  To launch with passwords the two droplet create calls must be adjusted
 token='' # Token Here
 ##########################
